@@ -11,6 +11,10 @@ namespace OMI
     /// <summary>
     /// Context object passed to extension handlers during glTF export.
     /// Provides access to Unity objects and the glTF being built.
+    /// 
+    /// Custom handlers can use the CustomData dictionary to store their own
+    /// object mappings and ignore the Unity-specific properties if they
+    /// have their own abstraction layer.
     /// </summary>
     public class OMIExportContext
     {
@@ -27,6 +31,7 @@ namespace OMI
 
         /// <summary>
         /// Mapping from Unity GameObjects to glTF node indices.
+        /// Custom handlers may ignore this and use CustomData for their own mappings.
         /// </summary>
         public IReadOnlyDictionary<GameObject, int> GameObjectToNode => _gameObjectToNode;
         private readonly Dictionary<GameObject, int> _gameObjectToNode = new Dictionary<GameObject, int>();
@@ -44,6 +49,7 @@ namespace OMI
 
         /// <summary>
         /// Custom data storage for sharing information between handlers.
+        /// Use this to store your own object mappings if you have a custom framework.
         /// </summary>
         public Dictionary<string, object> CustomData { get; } = new Dictionary<string, object>();
 
@@ -143,5 +149,78 @@ namespace OMI
             data = null;
             return false;
         }
+
+        #region Extension-specific index tracking
+
+        private Dictionary<GameObject, int> _emitterIndices = new Dictionary<GameObject, int>();
+        private Dictionary<GameObject, int> _wheelIndices = new Dictionary<GameObject, int>();
+        private Dictionary<GameObject, int> _thrusterIndices = new Dictionary<GameObject, int>();
+        private Dictionary<GameObject, int> _hoverThrusterIndices = new Dictionary<GameObject, int>();
+
+        /// <summary>
+        /// Registers an audio emitter index for a GameObject.
+        /// </summary>
+        public void RegisterEmitterIndex(GameObject gameObject, int index)
+        {
+            _emitterIndices[gameObject] = index;
+        }
+
+        /// <summary>
+        /// Gets the audio emitter index for a GameObject.
+        /// </summary>
+        public int GetEmitterIndex(GameObject gameObject)
+        {
+            return _emitterIndices.TryGetValue(gameObject, out var index) ? index : -1;
+        }
+
+        /// <summary>
+        /// Registers a vehicle wheel index for a GameObject.
+        /// </summary>
+        public void RegisterWheelIndex(GameObject gameObject, int index)
+        {
+            _wheelIndices[gameObject] = index;
+        }
+
+        /// <summary>
+        /// Gets the vehicle wheel index for a GameObject.
+        /// </summary>
+        public int GetWheelIndex(GameObject gameObject)
+        {
+            return _wheelIndices.TryGetValue(gameObject, out var index) ? index : -1;
+        }
+
+        /// <summary>
+        /// Registers a vehicle thruster index for a GameObject.
+        /// </summary>
+        public void RegisterThrusterIndex(GameObject gameObject, int index)
+        {
+            _thrusterIndices[gameObject] = index;
+        }
+
+        /// <summary>
+        /// Gets the vehicle thruster index for a GameObject.
+        /// </summary>
+        public int GetThrusterIndex(GameObject gameObject)
+        {
+            return _thrusterIndices.TryGetValue(gameObject, out var index) ? index : -1;
+        }
+
+        /// <summary>
+        /// Registers a vehicle hover thruster index for a GameObject.
+        /// </summary>
+        public void RegisterHoverThrusterIndex(GameObject gameObject, int index)
+        {
+            _hoverThrusterIndices[gameObject] = index;
+        }
+
+        /// <summary>
+        /// Gets the vehicle hover thruster index for a GameObject.
+        /// </summary>
+        public int GetHoverThrusterIndex(GameObject gameObject)
+        {
+            return _hoverThrusterIndices.TryGetValue(gameObject, out var index) ? index : -1;
+        }
+
+        #endregion
     }
 }

@@ -3,7 +3,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 
 namespace OMI
@@ -14,9 +13,14 @@ namespace OMI
     /// </summary>
     public class OMIExtensionManager
     {
-        private readonly Dictionary<string, object> _handlers = new Dictionary<string, object>();
-        private readonly Dictionary<Type, object> _handlersByInterface = new Dictionary<Type, object>();
-        private readonly List<object> _allHandlers = new List<object>();
+        private readonly Dictionary<string, object> _handlers = new Dictionary<string, object>(16);
+        private readonly Dictionary<Type, object> _handlersByInterface = new Dictionary<Type, object>(16);
+        private readonly List<object> _allHandlers = new List<object>(16);
+        
+        // Cached handler lists to avoid allocation on each call
+        private List<object> _cachedNodeHandlers;
+        private List<object> _cachedDocumentHandlers;
+        private bool _handlerCacheDirty = true;
 
         /// <summary>
         /// Gets all registered handler extension names.
@@ -45,20 +49,32 @@ namespace OMI
             _handlers[extensionName] = handler;
             _handlersByInterface[typeof(IOMIExtensionHandler<TData>)] = handler;
             
-            if (!_allHandlers.Contains(handler))
+            // Check if handler already exists using direct iteration (no LINQ)
+            bool exists = false;
+            for (int i = 0; i < _allHandlers.Count; i++)
+            {
+                if (ReferenceEquals(_allHandlers[i], handler))
+                {
+                    exists = true;
+                    break;
+                }
+            }
+            
+            if (!exists)
             {
                 _allHandlers.Add(handler);
             }
 
-            // Sort by priority (higher first)
-            _allHandlers.Sort((a, b) =>
-            {
-                var priorityA = GetHandlerPriority(a);
-                var priorityB = GetHandlerPriority(b);
-                return priorityB.CompareTo(priorityA);
-            });
+            // Sort by priority (higher first) - in-place sort
+            _allHandlers.Sort(CompareHandlerPriority);
+            
+            // Mark caches as dirty
+            _handlerCacheDirty = true;
 
-            Debug.Log($"[OMI] Registered handler for extension: {extensionName}");
+            if (Application.isEditor)
+            {
+                Debug.Log($"[OMI] Registered handler for extension: {extensionName}");
+            }
         }
 
         /// <summary>
@@ -72,12 +88,21 @@ namespace OMI
                 _handlers.Remove(extensionName);
                 _allHandlers.Remove(handler);
                 
-                // Find and remove from interface dictionary
-                var toRemove = _handlersByInterface.Where(kvp => kvp.Value == handler).Select(kvp => kvp.Key).ToList();
-                foreach (var key in toRemove)
+                // Find and remove from interface dictionary without LINQ
+                var keysToRemove = new List<Type>(4);
+                foreach (var kvp in _handlersByInterface)
                 {
-                    _handlersByInterface.Remove(key);
+                    if (ReferenceEquals(kvp.Value, handler))
+                    {
+                        keysToRemove.Add(kvp.Key);
+                    }
                 }
+                for (int i = 0; i < keysToRemove.Count; i++)
+                {
+                    _handlersByInterface.Remove(keysToRemove[i]);
+                }
+                
+                _handlerCacheDirty = true;
             }
         }
 
@@ -108,12 +133,12 @@ namespace OMI
                 return handler as THandler;
             }
             
-            // Try to find by scanning all handlers
-            foreach (var h in _allHandlers)
+            // Try to find by scanning all handlers (no LINQ)
+            for (int i = 0; i < _allHandlers.Count; i++)
             {
-                if (h is THandler typed)
+                if (_allHandlers[i] is THandler typed)
                 {
-                    _handlersByInterface[typeof(THandler)] = h;
+                    _handlersByInterface[typeof(THandler)] = _allHandlers[i];
                     return typed;
                 }
             }
@@ -122,19 +147,21 @@ namespace OMI
         }
 
         /// <summary>
-        /// Gets all node extension handlers.
+        /// Gets all node extension handlers (cached).
         /// </summary>
-        public IEnumerable<object> GetNodeHandlers()
+        public IReadOnlyList<object> GetNodeHandlers()
         {
-            return _allHandlers.Where(h => IsNodeHandler(h));
+            RebuildCachesIfNeeded();
+            return _cachedNodeHandlers;
         }
 
         /// <summary>
-        /// Gets all document extension handlers.
+        /// Gets all document extension handlers (cached).
         /// </summary>
-        public IEnumerable<object> GetDocumentHandlers()
+        public IReadOnlyList<object> GetDocumentHandlers()
         {
-            return _allHandlers.Where(h => IsDocumentHandler(h));
+            RebuildCachesIfNeeded();
+            return _cachedDocumentHandlers;
         }
 
         /// <summary>
@@ -153,6 +180,9 @@ namespace OMI
             _handlers.Clear();
             _handlersByInterface.Clear();
             _allHandlers.Clear();
+            _cachedNodeHandlers?.Clear();
+            _cachedDocumentHandlers?.Clear();
+            _handlerCacheDirty = true;
         }
 
         /// <summary>
@@ -165,31 +195,116 @@ namespace OMI
             return manager;
         }
 
+        private void RebuildCachesIfNeeded()
+        {
+            if (!_handlerCacheDirty)
+                return;
+
+            _cachedNodeHandlers ??= new List<object>(8);
+            _cachedDocumentHandlers ??= new List<object>(8);
+            
+            _cachedNodeHandlers.Clear();
+            _cachedDocumentHandlers.Clear();
+
+            for (int i = 0; i < _allHandlers.Count; i++)
+            {
+                var handler = _allHandlers[i];
+                if (IsNodeHandler(handler))
+                {
+                    _cachedNodeHandlers.Add(handler);
+                }
+                if (IsDocumentHandler(handler))
+                {
+                    _cachedDocumentHandlers.Add(handler);
+                }
+            }
+
+            _handlerCacheDirty = false;
+        }
+
+        private static int CompareHandlerPriority(object a, object b)
+        {
+            return GetHandlerPriority(b).CompareTo(GetHandlerPriority(a));
+        }
+
+        // Cache for handler priority lookups
+        private static readonly Dictionary<Type, int> s_PriorityCache = new Dictionary<Type, int>(32);
+
         private static int GetHandlerPriority(object handler)
         {
             var type = handler.GetType();
+            
+            if (s_PriorityCache.TryGetValue(type, out var cachedPriority))
+            {
+                return cachedPriority;
+            }
+            
             var property = type.GetProperty("Priority");
+            int priority = 0;
             if (property != null)
             {
-                return (int)property.GetValue(handler);
+                priority = (int)property.GetValue(handler);
             }
-            return 0;
+            
+            s_PriorityCache[type] = priority;
+            return priority;
         }
+
+        // Cache for handler type checks
+        private static readonly Dictionary<Type, bool> s_NodeHandlerCache = new Dictionary<Type, bool>(32);
+        private static readonly Dictionary<Type, bool> s_DocumentHandlerCache = new Dictionary<Type, bool>(32);
+        private static readonly Type s_NodeHandlerType = typeof(IOMINodeExtensionHandler<>);
+        private static readonly Type s_DocumentHandlerType = typeof(IOMIDocumentExtensionHandler<>);
 
         private static bool IsNodeHandler(object handler)
         {
             var type = handler.GetType();
-            return type.GetInterfaces().Any(i =>
-                i.IsGenericType &&
-                i.GetGenericTypeDefinition() == typeof(IOMINodeExtensionHandler<>));
+            
+            if (s_NodeHandlerCache.TryGetValue(type, out var cached))
+            {
+                return cached;
+            }
+            
+            var interfaces = type.GetInterfaces();
+            bool isNodeHandler = false;
+            for (int i = 0; i < interfaces.Length; i++)
+            {
+                var iface = interfaces[i];
+                if (iface.IsGenericType && iface.GetGenericTypeDefinition() == s_NodeHandlerType)
+                {
+                    isNodeHandler = true;
+                    break;
+                }
+            }
+            
+            s_NodeHandlerCache[type] = isNodeHandler;
+            return isNodeHandler;
         }
 
         private static bool IsDocumentHandler(object handler)
         {
             var type = handler.GetType();
-            return type.GetInterfaces().Any(i =>
-                i.IsGenericType &&
-                i.GetGenericTypeDefinition() == typeof(IOMIDocumentExtensionHandler<>));
+            
+            if (s_DocumentHandlerCache.TryGetValue(type, out var cached))
+            {
+                return cached;
+            }
+            
+            var interfaces = type.GetInterfaces();
+            bool isDocHandler = false;
+            for (int i = 0; i < interfaces.Length; i++)
+            {
+                var iface = interfaces[i];
+                if (iface.IsGenericType && iface.GetGenericTypeDefinition() == s_DocumentHandlerType)
+                {
+                    isDocHandler = true;
+                    break;
+                }
+            }
+            
+            s_DocumentHandlerCache[type] = isDocHandler;
+            return isDocHandler;
         }
     }
 }
+

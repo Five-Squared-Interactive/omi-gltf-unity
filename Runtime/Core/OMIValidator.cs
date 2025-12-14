@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using UnityEngine;
+using OMI.Extensions.EnvironmentSky;
 
 namespace OMI
 {
@@ -413,6 +414,391 @@ namespace OMI
             // Check absolute URIs
             return Uri.TryCreate(uri, UriKind.Absolute, out _) || 
                    Uri.TryCreate(uri, UriKind.Relative, out _);
+        }
+
+        /// <summary>
+        /// Validates environment sky data.
+        /// </summary>
+        public static ValidationResult ValidateEnvironmentSky(Extensions.EnvironmentSky.OMIEnvironmentSkySkyData data)
+        {
+            var result = ValidationResult.Success();
+
+            if (data == null)
+            {
+                result.AddError("Environment sky data is null");
+                return result;
+            }
+
+            var skyType = data.GetSkyType();
+
+            switch (skyType)
+            {
+                case Extensions.EnvironmentSky.OMIEnvironmentSkyType.Gradient:
+                    if (data.Gradient == null)
+                    {
+                        result.AddError("Gradient sky specified but gradient data is null");
+                    }
+                    else
+                    {
+                        ValidateColorArray(ref result, data.Gradient.TopColor, "Top color");
+                        ValidateColorArray(ref result, data.Gradient.HorizonColor, "Horizon color");
+                        ValidateColorArray(ref result, data.Gradient.BottomColor, "Bottom color");
+
+                        if (data.Gradient.TopCurve.HasValue && data.Gradient.TopCurve.Value <= 0)
+                            result.AddError("Top curve must be positive");
+                        if (data.Gradient.BottomCurve.HasValue && data.Gradient.BottomCurve.Value <= 0)
+                            result.AddError("Bottom curve must be positive");
+                        if (data.Gradient.SunCurve.HasValue && data.Gradient.SunCurve.Value <= 0)
+                            result.AddError("Sun curve must be positive");
+                    }
+                    break;
+
+                case Extensions.EnvironmentSky.OMIEnvironmentSkyType.Panorama:
+                    if (data.Panorama == null)
+                    {
+                        result.AddError("Panorama sky specified but panorama data is null");
+                    }
+                    else
+                    {
+                        if (!data.Panorama.HasCubemap && !data.Panorama.HasEquirectangular)
+                        {
+                            result.AddError("Panorama sky must have either cubemap or equirectangular texture");
+                        }
+                        if (data.Panorama.HasCubemap && data.Panorama.Cubemap.Length != 6)
+                        {
+                            result.AddError("Cubemap must have exactly 6 texture indices");
+                        }
+                    }
+                    break;
+
+                case Extensions.EnvironmentSky.OMIEnvironmentSkyType.Physical:
+                    if (data.Physical == null)
+                    {
+                        result.AddError("Physical sky specified but physical data is null");
+                    }
+                    else
+                    {
+                        var anisotropy = data.Physical.GetMieAnisotropy();
+                        if (anisotropy < -1 || anisotropy > 1)
+                        {
+                            result.AddError("Mie anisotropy must be between -1 and 1");
+                        }
+
+                        if (data.Physical.MieScale.HasValue && data.Physical.MieScale.Value < 0)
+                            result.AddError("Mie scale must be non-negative");
+                        if (data.Physical.RayleighScale.HasValue && data.Physical.RayleighScale.Value < 0)
+                            result.AddError("Rayleigh scale must be non-negative");
+                    }
+                    break;
+
+                case Extensions.EnvironmentSky.OMIEnvironmentSkyType.Plain:
+                    if (data.Plain != null)
+                    {
+                        ValidateColorArray(ref result, data.Plain.Color, "Sky color");
+                    }
+                    break;
+            }
+
+            // Validate ambient settings
+            ValidateColorArray(ref result, data.AmbientLightColor, "Ambient light color");
+            
+            if (data.AmbientSkyContribution.HasValue)
+            {
+                if (data.AmbientSkyContribution.Value < 0 || data.AmbientSkyContribution.Value > 1)
+                {
+                    result.AddWarning("Ambient sky contribution should be between 0 and 1");
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Validates vehicle body data.
+        /// </summary>
+        public static ValidationResult ValidateVehicleBody(Extensions.Vehicle.OMIVehicleBodyNode data)
+        {
+            var result = ValidationResult.Success();
+
+            if (data == null)
+            {
+                result.AddError("Vehicle body data is null");
+                return result;
+            }
+
+            // Validate angular activation if provided
+            if (data.angularActivation != null && data.angularActivation.Length >= 3)
+            {
+                for (int i = 0; i < 3; i++)
+                {
+                    if (data.angularActivation[i] < -1 || data.angularActivation[i] > 1)
+                    {
+                        result.AddWarning($"Angular activation[{i}] should be between -1 and 1");
+                    }
+                }
+            }
+
+            // Validate linear activation if provided
+            if (data.linearActivation != null && data.linearActivation.Length >= 3)
+            {
+                for (int i = 0; i < 3; i++)
+                {
+                    if (data.linearActivation[i] < -1 || data.linearActivation[i] > 1)
+                    {
+                        result.AddWarning($"Linear activation[{i}] should be between -1 and 1");
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Validates vehicle wheel data.
+        /// </summary>
+        public static ValidationResult ValidateVehicleWheel(Extensions.Vehicle.OMIVehicleWheelSettings data)
+        {
+            var result = ValidationResult.Success();
+
+            if (data == null)
+            {
+                result.AddError("Vehicle wheel data is null");
+                return result;
+            }
+
+            if (data.radius <= 0)
+            {
+                result.AddError("Wheel radius must be positive");
+            }
+
+            if (data.maxForce < 0)
+            {
+                result.AddError("Max force must be non-negative");
+            }
+
+            if (data.suspensionStiffness < 0)
+            {
+                result.AddError("Suspension stiffness must be non-negative");
+            }
+
+            if (data.suspensionDampingCompression < 0 || data.suspensionDampingRebound < 0)
+            {
+                result.AddError("Suspension damping must be non-negative");
+            }
+
+            if (data.suspensionTravel < 0)
+            {
+                result.AddError("Suspension travel must be non-negative");
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Validates vehicle thruster data.
+        /// </summary>
+        public static ValidationResult ValidateVehicleThruster(Extensions.Vehicle.OMIVehicleThrusterSettings data)
+        {
+            var result = ValidationResult.Success();
+
+            if (data == null)
+            {
+                result.AddError("Vehicle thruster data is null");
+                return result;
+            }
+
+            if (data.maxForce < 0)
+            {
+                result.AddError("Max force must be non-negative");
+            }
+
+            if (data.maxGimbal < 0)
+            {
+                result.AddWarning("Max gimbal angle should be non-negative");
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Validates vehicle hover thruster data.
+        /// </summary>
+        public static ValidationResult ValidateVehicleHoverThruster(Extensions.Vehicle.OMIVehicleHoverThrusterSettings data)
+        {
+            var result = ValidationResult.Success();
+
+            if (data == null)
+            {
+                result.AddError("Vehicle hover thruster data is null");
+                return result;
+            }
+
+            if (data.maxHoverEnergy < 0)
+            {
+                result.AddError("Max hover energy must be non-negative");
+            }
+
+            if (data.maxGimbal < 0)
+            {
+                result.AddWarning("Max gimbal angle should be non-negative");
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Validates audio emitter data.
+        /// </summary>
+        public static ValidationResult ValidateAudioEmitter(Extensions.Audio.KHRAudioEmitter data)
+        {
+            var result = ValidationResult.Success();
+
+            if (data == null)
+            {
+                result.AddError("Audio emitter data is null");
+                return result;
+            }
+
+            if (data.gain < 0)
+            {
+                result.AddError("Gain must be non-negative");
+            }
+            if (data.gain > 10)
+            {
+                result.AddWarning("Very high gain value - may cause audio clipping");
+            }
+
+            if (data.TypeEnum == Extensions.Audio.AudioEmitterType.Positional && data.positional != null)
+            {
+                var coneInner = data.positional.coneInnerAngle;
+                var coneOuter = data.positional.coneOuterAngle;
+                
+                if (coneInner < 0 || coneInner > 2 * Mathf.PI)
+                    result.AddError("Cone inner angle must be between 0 and 2π");
+                if (coneOuter < 0 || coneOuter > 2 * Mathf.PI)
+                    result.AddError("Cone outer angle must be between 0 and 2π");
+                if (coneInner > coneOuter)
+                    result.AddWarning("Cone inner angle is greater than outer angle");
+
+                var refDist = data.positional.refDistance;
+                var maxDist = data.positional.maxDistance;
+                if (refDist < 0)
+                    result.AddError("Reference distance must be non-negative");
+                if (!float.IsPositiveInfinity(maxDist) && maxDist < refDist)
+                    result.AddWarning("Max distance is less than reference distance");
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Validates physics gravity data.
+        /// </summary>
+        public static ValidationResult ValidatePhysicsGravity(Extensions.PhysicsGravity.OMIPhysicsGravityNode data)
+        {
+            var result = ValidationResult.Success();
+
+            if (data == null)
+            {
+                result.AddError("Physics gravity data is null");
+                return result;
+            }
+
+            var gravityType = data.Type;
+
+            switch (gravityType)
+            {
+                case Extensions.PhysicsGravity.OMIGravityType.Point:
+                    if (data.Point == null)
+                    {
+                        result.AddError("Point gravity specified but point data is null");
+                    }
+                    else
+                    {
+                        if (data.Point.UnitDistance <= 0)
+                        {
+                            result.AddWarning("Point gravity unit distance is zero or negative - gravity will be constant");
+                        }
+                    }
+                    break;
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Validates personality data.
+        /// </summary>
+        public static ValidationResult ValidatePersonality(Extensions.Personality.OMIPersonalityNode data)
+        {
+            var result = ValidationResult.Success();
+
+            if (data == null)
+            {
+                result.AddError("Personality data is null");
+                return result;
+            }
+
+            if (string.IsNullOrEmpty(data.Agent))
+            {
+                result.AddWarning("Personality has no agent specified");
+            }
+
+            if (string.IsNullOrEmpty(data.Personality))
+            {
+                result.AddWarning("Personality has no personality text specified");
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Validates physics joint data.
+        /// </summary>
+        public static ValidationResult ValidatePhysicsJoint(Extensions.PhysicsJoint.OMIPhysicsJointNode data, int maxNodeIndex = int.MaxValue)
+        {
+            var result = ValidationResult.Success();
+
+            if (data == null)
+            {
+                result.AddError("Physics joint data is null");
+                return result;
+            }
+
+            if (data.ConnectedNode < 0)
+            {
+                result.AddError("Connected node index must be non-negative");
+            }
+            else if (data.ConnectedNode > maxNodeIndex)
+            {
+                result.AddError($"Connected node index {data.ConnectedNode} exceeds maximum node index {maxNodeIndex}");
+            }
+
+            if (data.Joint < 0)
+            {
+                result.AddError("Joint settings index must be non-negative");
+            }
+
+            return result;
+        }
+
+        private static void ValidateColorArray(ref ValidationResult result, float[] color, string name)
+        {
+            if (color == null) return;
+
+            if (color.Length < 3)
+            {
+                result.AddError($"{name} must have at least 3 components (RGB)");
+                return;
+            }
+
+            for (int i = 0; i < 3; i++)
+            {
+                if (color[i] < 0 || color[i] > 1)
+                {
+                    result.AddWarning($"{name} component {i} is outside 0-1 range (value: {color[i]})");
+                }
+            }
         }
     }
 }

@@ -2,6 +2,7 @@
 // Copyright (c) 2025 Five Squared Interactive. All rights reserved.
 
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using GLTFast;
@@ -139,9 +140,8 @@ namespace OMI.Integration
         /// </summary>
         private async Task ProcessOMIExtensionsAsync(GameObject rootObject, CancellationToken cancellationToken)
         {
-            // Build node mapping
-            int nodeIndex = 0;
-            BuildNodeMappingRecursive(rootObject, ref nodeIndex);
+            // Build node mapping using optimized traversal
+            _context.BuildNodeMapping(rootObject);
 
             // Try to get the raw JSON from glTFast (this may not be available in all versions)
             // For now, we'll work with what we have
@@ -155,33 +155,28 @@ namespace OMI.Integration
             await ProcessExistingOMIComponentsAsync(rootObject, cancellationToken);
         }
 
-        private void BuildNodeMappingRecursive(GameObject obj, ref int index)
-        {
-            _context.RegisterNode(index++, obj);
-            
-            foreach (Transform child in obj.transform)
-            {
-                BuildNodeMappingRecursive(child.gameObject, ref index);
-            }
-        }
-
         private async Task ProcessExistingOMIComponentsAsync(GameObject root, CancellationToken cancellationToken)
         {
             // This processes any OMI components that might have been added by other means
             // (e.g., if the scene was set up manually or by another importer)
+            // Reuse lists to minimize allocations
+            var spawnPoints = new List<OMISpawnPoint>(8);
+            var seats = new List<OMISeat>(8);
+            var links = new List<OMILink>(8);
 
-            var spawnPoints = root.GetComponentsInChildren<OMISpawnPoint>();
-            var seats = root.GetComponentsInChildren<OMISeat>();
-            var links = root.GetComponentsInChildren<OMILink>();
+            OMIHierarchyUtility.GetComponentsInChildren(root.transform, spawnPoints, true);
+            OMIHierarchyUtility.GetComponentsInChildren(root.transform, seats, true);
+            OMIHierarchyUtility.GetComponentsInChildren(root.transform, links, true);
 
             if (_settings.VerboseLogging)
             {
-                Debug.Log($"[OMI] Found {spawnPoints.Length} spawn points, {seats.Length} seats, {links.Length} links");
+                Debug.Log($"[OMI] Found {spawnPoints.Count} spawn points, {seats.Count} seats, {links.Count} links");
             }
         }
 
         public void Dispose()
         {
+            _context?.Dispose();
             _gltfImport?.Dispose();
             _gltfImport = null;
             _context = null;

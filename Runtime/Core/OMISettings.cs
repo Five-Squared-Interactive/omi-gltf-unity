@@ -74,6 +74,42 @@ namespace OMI
         public bool ImportLinks = true;
 
         /// <summary>
+        /// Whether to import physics gravity zones.
+        /// </summary>
+        [Tooltip("Import OMI_physics_gravity extension data.")]
+        public bool ImportPhysicsGravity = true;
+
+        /// <summary>
+        /// Whether to import personality data.
+        /// </summary>
+        [Tooltip("Import OMI_personality extension data.")]
+        public bool ImportPersonality = true;
+
+        /// <summary>
+        /// Whether to import vehicle bodies.
+        /// </summary>
+        [Tooltip("Import OMI_vehicle_body extension data.")]
+        public bool ImportVehicleBodies = true;
+
+        /// <summary>
+        /// Whether to import vehicle wheels.
+        /// </summary>
+        [Tooltip("Import OMI_vehicle_wheel extension data.")]
+        public bool ImportVehicleWheels = true;
+
+        /// <summary>
+        /// Whether to import vehicle thrusters.
+        /// </summary>
+        [Tooltip("Import OMI_vehicle_thruster extension data.")]
+        public bool ImportVehicleThrusters = true;
+
+        /// <summary>
+        /// Whether to import vehicle hover thrusters.
+        /// </summary>
+        [Tooltip("Import OMI_vehicle_hover_thruster extension data.")]
+        public bool ImportVehicleHoverThrusters = true;
+
+        /// <summary>
         /// The default physics layer for colliders.
         /// </summary>
         [Tooltip("Default Unity layer for imported physics colliders.")]
@@ -135,6 +171,42 @@ namespace OMI
         public bool ExportLinks = true;
 
         /// <summary>
+        /// Whether to export physics gravity zones.
+        /// </summary>
+        [Tooltip("Export OMI_physics_gravity extension data.")]
+        public bool ExportPhysicsGravity = true;
+
+        /// <summary>
+        /// Whether to export personality data.
+        /// </summary>
+        [Tooltip("Export OMI_personality extension data.")]
+        public bool ExportPersonality = true;
+
+        /// <summary>
+        /// Whether to export vehicle bodies.
+        /// </summary>
+        [Tooltip("Export OMI_vehicle_body extension data.")]
+        public bool ExportVehicleBodies = true;
+
+        /// <summary>
+        /// Whether to export vehicle wheels.
+        /// </summary>
+        [Tooltip("Export OMI_vehicle_wheel extension data.")]
+        public bool ExportVehicleWheels = true;
+
+        /// <summary>
+        /// Whether to export vehicle thrusters.
+        /// </summary>
+        [Tooltip("Export OMI_vehicle_thruster extension data.")]
+        public bool ExportVehicleThrusters = true;
+
+        /// <summary>
+        /// Whether to export vehicle hover thrusters.
+        /// </summary>
+        [Tooltip("Export OMI_vehicle_hover_thruster extension data.")]
+        public bool ExportVehicleHoverThrusters = true;
+
+        /// <summary>
         /// Whether to include extensions in extensionsRequired.
         /// </summary>
         [Tooltip("Mark OMI extensions as required in the glTF.")]
@@ -169,9 +241,18 @@ namespace OMI
             "OMI_physics_shape",
             "OMI_physics_body",
             "OMI_physics_joint",
+            "OMI_physics_gravity",
             "OMI_spawn_point",
             "OMI_seat",
-            "OMI_link"
+            "OMI_link",
+            "OMI_personality",
+            "KHR_audio_emitter",
+            "OMI_audio_ogg_vorbis",
+            "OMI_audio_opus",
+            "OMI_vehicle_body",
+            "OMI_vehicle_wheel",
+            "OMI_vehicle_thruster",
+            "OMI_vehicle_hover_thruster"
         };
 
         [Header("Import Settings")]

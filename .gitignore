@@ -19,6 +19,7 @@
 /*.meta
 !Runtime.meta
 !Editor.meta
+!Tests.meta
 !package.json.meta
 !README.md.meta
 !LICENSE.md.meta

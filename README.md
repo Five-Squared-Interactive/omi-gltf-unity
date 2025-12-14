@@ -15,24 +15,31 @@ A Unity plugin for importing and exporting glTF files with [OMI (Open Metaverse 
 
 ### Physics
 - `OMI_physics_shape` - Collision shapes (box, sphere, capsule, cylinder, convex, trimesh)
-- `OMI_physics_body` - Rigid body physics (static, kinematic, dynamic)
-- `OMI_physics_joint` - Physics constraints and joints
+- `OMI_physics_body` - Rigid body physics (static, kinematic, dynamic, trigger)
+- `OMI_physics_joint` - Physics constraints (fixed, hinge, slider, ball socket, 6DOF)
+- `OMI_physics_gravity` - Custom gravity zones (directional, point)
 
 ### Interaction
 - `OMI_spawn_point` - Spawn points for players/objects
 - `OMI_seat` - Seating positions with IK data
 - `OMI_link` - Hyperlinks and navigation targets
 
-### Audio (Coming Soon)
+### Audio
 - `KHR_audio_emitter` - 3D audio emitters
-- `OMI_audio_ogg_vorbis` - Ogg Vorbis audio codec
-- `OMI_audio_opus` - Opus audio codec
+- `OMI_audio_ogg_vorbis` - Ogg Vorbis audio codec support
+- `OMI_audio_opus` - Opus audio codec support
 
-### Vehicles (Coming Soon)
+### Vehicles
 - `OMI_vehicle_body` - Vehicle physics body
 - `OMI_vehicle_wheel` - Vehicle wheels
 - `OMI_vehicle_thruster` - Directional thrusters
 - `OMI_vehicle_hover_thruster` - Hovering thrusters
+
+### Environment
+- `OMI_environment_sky` - Skybox configuration (gradient, panorama, physical, plain)
+
+### AI/Character
+- `OMI_personality` - AI agent personality traits and prompts
 
 ## Installation
 
@@ -171,21 +178,156 @@ OMI/
 │   │   ├── OMIExtensionManager.cs     # Handler registry
 │   │   ├── OMIImportContext.cs        # Import context
 │   │   ├── OMIExportContext.cs        # Export context
+│   │   ├── OMIDefaultHandlers.cs      # Default handler registration
 │   │   ├── OMISettings.cs             # Settings classes
 │   │   └── OMIValidator.cs            # Validation utilities
 │   ├── Extensions/
-│   │   ├── PhysicsShape/              # OMI_physics_shape
+│   │   ├── Audio/                     # KHR_audio_emitter
+│   │   ├── EnvironmentSky/            # OMI_environment_sky
+│   │   ├── Link/                      # OMI_link
+│   │   ├── Personality/               # OMI_personality
 │   │   ├── PhysicsBody/               # OMI_physics_body
+│   │   ├── PhysicsGravity/            # OMI_physics_gravity
 │   │   ├── PhysicsJoint/              # OMI_physics_joint
-│   │   ├── SpawnPoint/                # OMI_spawn_point
+│   │   ├── PhysicsShape/              # OMI_physics_shape
 │   │   ├── Seat/                      # OMI_seat
-│   │   └── Link/                      # OMI_link
+│   │   ├── SpawnPoint/                # OMI_spawn_point
+│   │   └── Vehicle/                   # OMI_vehicle_*
 │   ├── DefaultHandlers/               # Built-in Unity handlers
-│   └── Integration/                   # glTFast integration
-└── Editor/
-    ├── OMISettingsEditor.cs           # Settings inspector
-    └── OMIComponentInspectors.cs      # Component inspectors
+│   └── Integration/                   # glTFast integration & export
+├── Editor/
+│   ├── OMISettingsEditor.cs           # Settings inspector
+│   ├── OMIComponentInspectors.cs      # Component inspectors
+│   └── OMIExportMenu.cs               # Export menu items
+└── Tests/
+    ├── Editor/                        # Unit tests
+    └── Runtime/                       # Runtime tests
 ```
+
+## Architecture
+
+### Handler Pattern
+
+The plugin uses a handler pattern that allows customization at multiple levels:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     glTF Document                           │
+├─────────────────────────────────────────────────────────────┤
+│  OMIExtensionManager                                        │
+│  ├── Registers handlers for each extension                  │
+│  └── Routes extension data to appropriate handler           │
+├─────────────────────────────────────────────────────────────┤
+│  Handler Types:                                             │
+│  ├── IOMIDocumentExtensionHandler - Document-level (sky)   │
+│  ├── IOMINodeExtensionHandler - Per-node (spawn, seat)     │
+│  └── IOMIExtensionHandler - Base interface                  │
+├─────────────────────────────────────────────────────────────┤
+│  Default Handlers (Unity)         Custom Handlers           │
+│  └── Create Unity components      └── Your framework        │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Custom Handler Example (WebVerse-style)
+
+For frameworks that wrap Unity objects, handlers can use `nodeIndex` and `CustomData` instead of `GameObject`:
+
+```csharp
+public class WebVerseSpawnPointHandler : IOMINodeExtensionHandler<OMISpawnPointNode>
+{
+    public string ExtensionName => "OMI_spawn_point";
+
+    public Task OnNodeImportAsync(OMISpawnPointNode data, int nodeIndex, 
+        GameObject target, OMIImportContext context, CancellationToken ct = default)
+    {
+        // Get our custom entity from the context
+        if (context.CustomData.TryGetValue($"entity_{nodeIndex}", out var entityObj))
+        {
+            var entity = entityObj as MyEntity;
+            entity.SetSpawnPoint(data.Team, data.Group);
+        }
+        
+        // Don't add Unity component - we handle it ourselves
+        return Task.CompletedTask;
+    }
+}
+```
+
+## Validation
+
+The plugin includes comprehensive validation for all extension data:
+
+```csharp
+using OMI;
+
+// Validate physics shape
+var shapeResult = OMIValidator.ValidatePhysicsShape(shapeData);
+if (!shapeResult.IsValid)
+{
+    foreach (var error in shapeResult.Errors)
+        Debug.LogError(error);
+}
+
+// Validate environment sky
+var skyResult = OMIValidator.ValidateEnvironmentSky(skyData);
+skyResult.LogAll(); // Logs all errors and warnings
+```
+
+### Available Validators
+
+- `ValidatePhysicsShape()` - Shape dimensions, mesh indices
+- `ValidatePhysicsBody()` - Mass, inertia, motion type
+- `ValidatePhysicsJoint()` - Node indices, constraint limits
+- `ValidatePhysicsGravity()` - Gravity values, unit distance
+- `ValidateSpawnPoint()` - String lengths
+- `ValidateSeat()` - Position arrays, angle ranges
+- `ValidateLink()` - URI format
+- `ValidateEnvironmentSky()` - Colors, curves, texture indices
+- `ValidateVehicleBody()` - Dampening, gyro values
+- `ValidateVehicleWheel()` - Radius, suspension settings
+- `ValidateVehicleThruster()` - Force, gimbal limits
+- `ValidateAudioEmitter()` - Gain, cone angles, distances
+
+## Export
+
+### Exporting from Code
+
+```csharp
+using OMI.Integration;
+
+// Export a GameObject hierarchy to glTF
+var exporter = new OMIGltfExporter();
+await exporter.ExportAsync(gameObject, "output.gltf");
+
+// Export with options
+var settings = new OMIExportSettings
+{
+    Format = OMIExportFormat.GLB,
+    IncludeInactive = false
+};
+await exporter.ExportAsync(gameObject, "output.glb", settings);
+```
+
+### Exporting from Editor
+
+Use the menu: **OMI > Export Selected to glTF/GLB**
+
+Or add an `OMIGltfExporterComponent` to your root object and configure export settings in the inspector.
+
+## Testing
+
+The plugin includes comprehensive unit tests:
+
+```bash
+# Run tests from Unity Test Runner
+# Window > General > Test Runner
+```
+
+Test coverage includes:
+- Data parsing for all extensions
+- Default value handling
+- Validation logic
+- Component round-trip serialization
 
 ## Requirements
 
