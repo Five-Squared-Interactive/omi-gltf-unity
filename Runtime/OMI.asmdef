@@ -1,0 +1,17 @@
+{
+    "name": "OMI",
+    "rootNamespace": "OMI",
+    "references": [
+        "glTFast",
+        "glTFast.Export"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

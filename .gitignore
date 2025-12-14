@@ -10,6 +10,14 @@
 /[Ll]ogs/
 /[Uu]ser[Ss]ettings/
 
+# Unity Package - exclude test project files
+/Assets/
+/ProjectSettings/
+/Packages/
+
+# Exclude .meta files in root (but keep them in Runtime/Editor)
+/*.meta
+
 # MemoryCaptures can get excessive in size.
 # They also could determine crash dumps which may not be desirable.
 /[Mm]emoryCaptures/

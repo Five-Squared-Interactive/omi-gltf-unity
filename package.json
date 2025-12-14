@@ -1,0 +1,29 @@
+{
+  "name": "com.fivesquared.omi-gltf",
+  "version": "0.1.0",
+  "displayName": "OMI glTF Extensions",
+  "description": "A Unity plugin for importing and exporting glTF files with OMI (Open Metaverse Interoperability) extensions. Supports physics shapes, bodies, joints, spawn points, seats, links and more.",
+  "unity": "2021.3",
+  "keywords": [
+    "gltf",
+    "omi",
+    "metaverse",
+    "interoperability",
+    "physics",
+    "import",
+    "export"
+  ],
+  "author": {
+    "name": "Five Squared Interactive",
+    "url": "https://github.com/Five-Squared-Interactive"
+  },
+  "dependencies": {
+    "com.unity.cloud.gltfast": "6.0.0",
+    "com.unity.nuget.newtonsoft-json": "3.0.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Five-Squared-Interactive/omi-gltf-unity.git"
+  }
+}
